@@ -117,15 +117,15 @@ services
             })
             .UseLiquid()
             .UseCSharp()
-            .UsePython(python =>
-            {
-                python.PythonOptions += options =>
-                {
-                    // Make sure to configure the path to the python DLL. E.g. /opt/homebrew/Cellar/python@3.11/3.11.6_1/Frameworks/Python.framework/Versions/3.11/bin/python3.11
-                    // alternatively, you can set the PYTHONNET_PYDLL environment variable.
-                    configuration.GetSection("Scripting:Python").Bind(options);
-                };
-            })
+            // .UsePython(python =>
+            // {
+            //     python.PythonOptions += options =>
+            //     {
+            //         // Make sure to configure the path to the python DLL. E.g. /opt/homebrew/Cellar/python@3.11/3.11.6_1/Frameworks/Python.framework/Versions/3.11/bin/python3.11
+            //         // alternatively, you can set the PYTHONNET_PYDLL environment variable.
+            //         configuration.GetSection("Scripting:Python").Bind(options);
+            //     };
+            // })
             .UseHttp(http =>
             {
                 if (useCaching)
@@ -140,6 +140,18 @@ services
             .UseEmail(email => email.ConfigureOptions = options => configuration.GetSection("Smtp").Bind(options))
             .UseWebhooks(webhooks => webhooks.ConfigureSinks = options => builder.Configuration.GetSection("Webhooks:Sinks").Bind(options))
             .UseWorkflowsApi()
+            .UseTenants(tenants =>
+            {
+                tenants.ConfigureMultitenancy(options =>
+                {
+                    // Configure the tenant resolution pipeline.
+                    options.TenantResolverPipelineBuilder.Append<ClaimsTenantResolver>();
+                });
+
+                // Install the configuration-based tenanta provider.
+                tenants.UseConfigurationBasedTenantsProvider(options => configuration.GetSection("Multitenancy").Bind(options));
+            })
+            .UseAlterations()
             .AddActivitiesFrom<Program>()
             .AddWorkflowsFrom<Program>();
 
@@ -181,10 +193,12 @@ services
         }
 
         elsa.UseConnections(
-            configure=> configure.AddConnectionsFrom<Program>());
-        elsa.UseConnectionPersistence(ef=> ef.UseEntityFrameworkCore(f=>f.UseSqlite()));
+            configure => configure.AddConnectionsFrom<Program>());
+        elsa.UseConnectionPersistence(ef => ef.UseEntityFrameworkCore(f => f.UseSqlite()));
         elsa.UseConnectionsApi();
     });
+
+services.AddHostedService<WorkflowCancelService>();
 
 services.Configure<WebhookSinksOptions>(options => configuration.GetSection("Webhooks").Bind(options));
 
